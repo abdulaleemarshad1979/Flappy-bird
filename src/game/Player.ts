@@ -35,7 +35,7 @@ export class Player {
 
   applyCharacter(): void {
     this.custom = assets.hasCharacter;
-    if (this.custom) this.sprite.setTexture('char-custom').setScale(0.72);
+    if (this.custom) this.sprite.setTexture('char-custom').setScale(0.18);
     else this.sprite.setTexture('bird', 0).setScale(1);
   }
 

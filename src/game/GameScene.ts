@@ -4,7 +4,7 @@ import { audio } from '../systems/AudioManager';
 import { settings } from '../systems/SettingsManager';
 import { stats, type Achievement } from '../systems/Stats';
 import { Backdrop } from './Backdrop';
-import { BIRD_X, DIFFICULTY, GROUND_Y, H, PIPE_H, PIPE_W, W } from './GameConfig';
+import { BIRD_X, DIFFICULTY, GROUND_Y, H, K, PIPE_H, PIPE_W, W } from './GameConfig';
 import { Player } from './Player';
 
 type State = 'ready' | 'playing' | 'dying' | 'over';
@@ -49,6 +49,7 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     this.pipes = [];
     this.particles = [];
+    this.cameras.main.setOrigin(0, 0).setZoom(K); // canvas is K times the logical size
     this.state = 'ready';
     this.paused = false;
     this.score = 0;
@@ -192,9 +193,8 @@ export class GameScene extends Phaser.Scene {
     const gapY = Phaser.Math.Clamp(this.lastGapY + Phaser.Math.Between(-130, 130), lo, hi);
     this.lastGapY = gapY;
     const x = W + 20;
-    const tint = this.backdrop.pipeTint;
-    const top = this.add.image(x, gapY - gap / 2, 'pipe').setOrigin(0, 1).setFlipY(true).setDepth(5).setTint(tint);
-    const bottom = this.add.image(x, gapY + gap / 2, 'pipe').setOrigin(0, 0).setDepth(5).setTint(tint);
+    const top = this.add.image(x, gapY - gap / 2, 'pipe').setOrigin(0, 1).setFlipY(true).setDepth(5);
+    const bottom = this.add.image(x, gapY + gap / 2, 'pipe').setOrigin(0, 0).setDepth(5);
     this.pipes.push({
       x,
       top,

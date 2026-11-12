@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GROUND_H, GROUND_Y, H, PIPE_H, PIPE_W, W } from './GameConfig';
+import { GROUND_H, PIPE_H, PIPE_W, W } from './GameConfig';
 
 /** All art is generated here as pixel-art canvases, so the game ships with zero image files. */
 const INK = '#543847';
@@ -168,52 +168,6 @@ function makeGround(): HTMLCanvasElement {
 }
 
 // ------------------------------------------------------------------ scenery
-function makeSky(id: string): HTMLCanvasElement {
-  const [c, ctx] = mk(W, H);
-  const lerp = (a: number[], b: number[], t: number) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
-  const band = (stops: number[][], pos: number[]) => {
-    for (let y = 0; y < H; y += 8) {
-      const t = y / H;
-      let i = 0;
-      while (i < pos.length - 2 && t > pos[i + 1]) i++;
-      const k = Math.min(1, Math.max(0, (t - pos[i]) / (pos[i + 1] - pos[i])));
-      ctx.fillStyle = `rgb(${lerp(stops[i], stops[i + 1], k).join(',')})`;
-      ctx.fillRect(0, y, W, 8);
-    }
-  };
-  const r = rng(7);
-  if (id === 'turquoise') {
-    ctx.fillStyle = '#4ec0ca';
-    ctx.fillRect(0, 0, W, H);
-  } else if (id === 'day') {
-    band([[42, 143, 216], [168, 228, 255]], [0, 1]);
-  } else if (id === 'sunset') {
-    band([[43, 31, 92], [194, 67, 122], [255, 164, 94]], [0, 0.55, 0.9]);
-    ctx.fillStyle = '#ffe28a';
-    for (let y = -34; y <= 34; y += 2) {
-      const half = Math.floor(Math.sqrt(34 * 34 - y * y));
-      ctx.fillRect(196 - half, GROUND_Y - 56 + y, half * 2, 2);
-    }
-  } else {
-    band([[7, 13, 38], [30, 47, 104]], [0, 0.9]);
-    for (let i = 0; i < 70; i++) {
-      ctx.fillStyle = r() > 0.7 ? '#ffffff' : '#9fb0e8';
-      ctx.fillRect(Math.floor(r() * W) & ~1, Math.floor(r() * (GROUND_Y - 76)) & ~1, 2, 2);
-    }
-    ctx.fillStyle = '#fff4c2';
-    for (let y = -16; y <= 16; y += 2) {
-      const half = Math.floor(Math.sqrt(16 * 16 - y * y));
-      ctx.fillRect(232 - half, 90 + y, half * 2, 2);
-    }
-    ctx.fillStyle = '#1b2a60'; // crescent cut
-    for (let y = -14; y <= 14; y += 2) {
-      const half = Math.floor(Math.sqrt(13 * 13 - y * y));
-      ctx.fillRect(238 - half, 86 + y, half * 2, 2);
-    }
-  }
-  return c;
-}
-
 function makeCity(): HTMLCanvasElement {
   const [c, ctx] = mk(W, 72);
   const r = rng(11);
@@ -275,7 +229,6 @@ export function generateTextures(scene: Phaser.Scene): void {
   add('cloudband', makeScallop(30, 48, 18, '#ffffff', '#ecfbe4', '#cdeec4'));
   add('bushes', makeScallop(27, 36, 15, '#9be655', '#5fd05a', '#44a84a'));
   add('cloud', makeCloud());
-  for (const id of ['turquoise', 'day', 'sunset', 'night']) add(`sky-${id}`, makeSky(id));
   const [px, pctx] = mk(4, 4);
   pctx.fillStyle = '#fff';
   pctx.fillRect(0, 0, 4, 4);

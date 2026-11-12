@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { bus } from '../bus';
 import { audio } from '../systems/AudioManager';
 import { Backdrop } from './Backdrop';
-import { H, W } from './GameConfig';
+import { H, K, W } from './GameConfig';
 import { Player } from './Player';
 
 export class MainMenuScene extends Phaser.Scene {
@@ -15,6 +15,7 @@ export class MainMenuScene extends Phaser.Scene {
 
   create(): void {
     audio.musicStop(250);
+    this.cameras.main.setOrigin(0, 0).setZoom(K); // canvas is K times the logical size
     this.backdrop = new Backdrop(this);
     const logo = this.add.image(W / 2, H * 0.2, 'logo').setDepth(8);
     this.tweens.add({ targets: logo, y: H * 0.2 + 8, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' });

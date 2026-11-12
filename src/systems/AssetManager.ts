@@ -1,12 +1,9 @@
 import Phaser from 'phaser';
 import { bus } from '../bus';
-import { H } from '../game/GameConfig';
 import { settings, type Kind, type Settings } from './SettingsManager';
 import { storage } from './StorageManager';
 
-export const CHAR_OUT = 56; // output sprite size (px)
-export const BG_W = 288 * 2; // custom background texture: image + mirrored image => seamless scroll
-export const BG_H = H;
+export const CHAR_OUT = 224; // output sprite size (px); drawn in game at ~0.18 scale
 
 const MAX_IMAGE = 12 * 1024 * 1024;
 const MAX_AUDIO = 25 * 1024 * 1024;
@@ -66,22 +63,48 @@ function trimTransparent(src: Src): Src {
   return out;
 }
 
+/** Repeated halving keeps big photos sharp when shrinking a lot (one big drawImage step aliases). */
+function shrink(src: Src, dw: number, dh: number): Src {
+  let cur = src;
+  while (cur.width / 2 >= dw && cur.height / 2 >= dh) {
+    const [c, x] = mkCanvas(Math.ceil(cur.width / 2), Math.ceil(cur.height / 2));
+    x.imageSmoothingQuality = 'high';
+    x.drawImage(cur, 0, 0, c.width, c.height);
+    cur = c;
+  }
+  return cur;
+}
+
+/** Square (Chebyshev) dilation by r, separable so slider drags stay fast. */
+function dilate(a: Uint8Array, size: number, r: number): Uint8Array {
+  const tmp = new Uint8Array(a.length), out = new Uint8Array(a.length);
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++)
+      if (a[y * size + x]) for (let dx = Math.max(-r, -x); dx <= Math.min(r, size - 1 - x); dx++) tmp[y * size + x + dx] = 1;
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++)
+      if (tmp[y * size + x]) for (let dy = Math.max(-r, -y); dy <= Math.min(r, size - 1 - y); dy++) out[(y + dy) * size + x] = 1;
+  return out;
+}
+
+// working grids: smooth mode is drawn at full detail, pixelate mode on a 24px grid scaled up 8x (both end at CHAR_OUT)
+const SMOOTH = { w: 192, m: 16, edge: 8 };
+const PIXEL = { w: 24, m: 2, edge: 1 };
+
 /**
- * Turn any picture into a pixel-art-friendly character sprite:
- * fit (aspect kept) -> optional pixelate+quantize -> hard-edged mask -> outline -> shadow.
+ * Turn any picture into a character sprite:
+ * fit (aspect kept) -> optional pixelate+quantize -> hard-edged mask -> optional outline / shadow.
  */
 export function renderCharacter(source: Src, o: Settings['character'], out: HTMLCanvasElement): void {
-  const src = o.crop === 'original' ? trimTransparent(source) : source;
-  const w = o.pixelate ? 24 : 48; // working resolution of the face area
-  const m = o.pixelate ? 2 : 4; // margin for outline + shadow
+  const src0 = o.crop === 'original' ? trimTransparent(source) : source;
+  const { w, m, edge } = o.pixelate ? PIXEL : SMOOTH;
   const size = w + 2 * m;
-  const edge = o.pixelate ? 1 : 2; // outline thickness / shadow offset in working px
   const [work, ctx] = mkCanvas(size, size);
 
   // 1. draw fitted image (cover for masks, contain for original), clipped to the face area
-  const sw = src.width, sh = src.height;
-  const fit = o.crop === 'original' ? Math.min(w / sw, w / sh) : Math.max(w / sw, w / sh);
-  const dw = sw * fit * o.zoom, dh = sh * fit * o.zoom;
+  const fit = o.crop === 'original' ? Math.min(w / src0.width, w / src0.height) : Math.max(w / src0.width, w / src0.height);
+  const dw = src0.width * fit * o.zoom, dh = src0.height * fit * o.zoom;
+  const src = shrink(src0, dw, dh);
   ctx.save();
   ctx.beginPath();
   ctx.rect(m, m, w, w);
@@ -97,6 +120,7 @@ export function renderCharacter(source: Src, o: Settings['character'], out: HTML
   const c = size / 2;
   const half = w / 2;
   const rad = w * 0.24;
+  const solid = new Uint8Array(size * size);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const i = (y * size + x) * 4;
@@ -110,45 +134,33 @@ export function renderCharacter(source: Src, o: Settings['character'], out: HTML
         d[i + 3] = 0;
         continue;
       }
+      solid[y * size + x] = 1;
       d[i + 3] = 255;
       if (o.pixelate) for (let k = 0; k < 3; k++) d[i + k] = Math.round((d[i + k] / 255) * 5) * 51; // 6 levels
     }
   }
 
-  // 3. outline: transparent pixels near an opaque one
+  // 3. outline: pixels within `edge` of the picture but not on it
   if (o.outline) {
-    const a = new Uint8Array(size * size);
-    for (let p = 0; p < a.length; p++) a[p] = d[p * 4 + 3];
-    for (let y = 0; y < size; y++)
-      for (let x = 0; x < size; x++) {
-        if (a[y * size + x]) continue;
-        let near = false;
-        for (let dy = -edge; dy <= edge && !near; dy++)
-          for (let dx = -edge; dx <= edge; dx++) {
-            const nx = x + dx, ny = y + dy;
-            if (nx >= 0 && ny >= 0 && nx < size && ny < size && a[ny * size + nx]) {
-              near = true;
-              break;
-            }
-          }
-        if (near) {
-          const i = (y * size + x) * 4;
-          d[i] = 0x54; d[i + 1] = 0x38; d[i + 2] = 0x47; d[i + 3] = 255;
-        }
+    const grown = dilate(solid, size, edge);
+    for (let p = 0; p < grown.length; p++)
+      if (grown[p] && !solid[p]) {
+        const i = p * 4;
+        d[i] = 0x54; d[i + 1] = 0x38; d[i + 2] = 0x47; d[i + 3] = 255;
       }
   }
   ctx.putImageData(img, 0, 0);
 
-  // 4. subtle shadow, then scale to the fixed output size with nearest-neighbour
+  // 4. optional shadow, then scale to the fixed output size (nearest keeps the pixel grid crisp)
   const [fin, fctx] = mkCanvas(size, size);
-  const [sh2, sctx] = mkCanvas(size, size);
-  sctx.drawImage(work, 0, 0);
-  sctx.globalCompositeOperation = 'source-in';
-  sctx.fillStyle = '#000';
-  sctx.fillRect(0, 0, size, size);
   if (o.shadow) {
+    const [sh, sctx] = mkCanvas(size, size);
+    sctx.drawImage(work, 0, 0);
+    sctx.globalCompositeOperation = 'source-in';
+    sctx.fillStyle = '#000';
+    sctx.fillRect(0, 0, size, size);
     fctx.globalAlpha = 0.28;
-    fctx.drawImage(sh2, 0, edge);
+    fctx.drawImage(sh, 0, edge);
     fctx.globalAlpha = 1;
   }
   fctx.drawImage(work, 0, 0);
@@ -158,23 +170,6 @@ export function renderCharacter(source: Src, o: Settings['character'], out: HTML
   octx.imageSmoothingEnabled = false;
   octx.clearRect(0, 0, CHAR_OUT, CHAR_OUT);
   octx.drawImage(fin, 0, 0, CHAR_OUT, CHAR_OUT);
-}
-
-/** Cover-fit the picture into one 288x512 tile and mirror it next to itself (seamless horizontal loop). */
-export function renderBackground(src: Src, out: HTMLCanvasElement): void {
-  const ctx = out.getContext('2d')!;
-  out.width = BG_W;
-  out.height = BG_H;
-  const s = Math.max(288 / src.width, BG_H / src.height);
-  const dw = src.width * s, dh = src.height * s;
-  const dx = (288 - dw) / 2, dy = (BG_H - dh) / 2;
-  ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(src, dx, dy, dw, dh);
-  ctx.save();
-  ctx.translate(BG_W, 0);
-  ctx.scale(-1, 1);
-  ctx.drawImage(src, dx, dy, dw, dh);
-  ctx.restore();
 }
 
 async function decode(blob: Blob): Promise<ImageBitmap> {
@@ -195,59 +190,40 @@ export interface SaveResult {
 
 class AssetManager {
   charSource: ImageBitmap | null = null;
-  bgSource: ImageBitmap | null = null;
   private charCanvas = Object.assign(document.createElement('canvas'), { width: CHAR_OUT, height: CHAR_OUT });
-  private bgCanvas = Object.assign(document.createElement('canvas'), { width: BG_W, height: BG_H });
   private charTex?: Phaser.Textures.CanvasTexture;
-  private bgTex?: Phaser.Textures.CanvasTexture;
 
   /** Load previously saved images (called before the game boots). */
   async init(): Promise<void> {
-    for (const kind of ['character', 'background'] as const) {
-      if (!settings.s.customs[kind]) continue;
-      const blob = await storage.getAsset(kind);
+    if (settings.s.customs.character) {
+      const blob = await storage.getAsset('character');
       try {
         if (!blob) throw new Error('missing');
         const bmp = await decode(blob);
-        if (kind === 'character') this.charSource = bmp;
-        else this.bgSource = bmp;
+        this.charSource = bmp;
       } catch {
-        settings.update((s) => {
-          s.customs[kind] = null;
-          if (kind === 'background' && s.background.theme === 'custom') s.background.theme = 'turquoise';
-        });
-        setTimeout(() => bus.emit('toast', `Saved custom ${kind} was not found. Using default.`), 800);
+        settings.update((s) => (s.customs.character = null));
+        setTimeout(() => bus.emit('toast', 'Saved custom character was not found. Using default.'), 800);
       }
     }
   }
 
-  /** Create the two persistent canvas textures (updated in place afterwards). */
+  /** Create the persistent character canvas texture (updated in place afterwards). */
   attach(textures: Phaser.Textures.TextureManager): void {
     this.charTex = textures.addCanvas('char-custom', this.charCanvas) ?? undefined;
-    this.bgTex = textures.addCanvas('sky-custom', this.bgCanvas) ?? undefined;
     this.redrawCharacter();
-    this.redrawBackground();
   }
 
   get hasCharacter(): boolean {
     return this.charSource !== null;
   }
-  get hasBackground(): boolean {
-    return this.bgSource !== null;
-  }
 
   redrawCharacter(): void {
     if (this.charSource) renderCharacter(this.charSource, settings.s.character, this.charCanvas);
     else this.charCanvas.getContext('2d')!.clearRect(0, 0, CHAR_OUT, CHAR_OUT);
+    this.charTex?.setFilter(settings.s.character.pixelate ? Phaser.Textures.FilterMode.NEAREST : Phaser.Textures.FilterMode.LINEAR);
     this.charTex?.refresh();
     bus.emit('character');
-  }
-
-  redrawBackground(): void {
-    if (this.bgSource) renderBackground(this.bgSource, this.bgCanvas);
-    else this.bgCanvas.getContext('2d')!.clearRect(0, 0, BG_W, BG_H);
-    this.bgTex?.refresh();
-    bus.emit('background');
   }
 
   /** Decode a user file for preview without applying it. */
@@ -261,23 +237,13 @@ class AssetManager {
     }
   }
 
-  /** Apply an already-decoded image as the active character / background and persist the file. */
-  async commit(kind: 'character' | 'background', file: File, bmp: ImageBitmap): Promise<SaveResult> {
-    const persisted = await storage.putAsset(kind, file);
-    if (kind === 'character') {
-      this.charSource?.close();
-      this.charSource = bmp;
-      settings.update((s) => (s.customs.character = file.name));
-      this.redrawCharacter();
-    } else {
-      this.bgSource?.close();
-      this.bgSource = bmp;
-      this.redrawBackground(); // draw before the settings event so the sky never snapshots a blank canvas
-      settings.update((s) => {
-        s.customs.background = file.name;
-        s.background.theme = 'custom';
-      });
-    }
+  /** Apply an already-decoded image as the active character and persist the file. */
+  async commit(file: File, bmp: ImageBitmap): Promise<SaveResult> {
+    const persisted = await storage.putAsset('character', file);
+    this.charSource?.close();
+    this.charSource = bmp;
+    settings.update((s) => (s.customs.character = file.name));
+    this.redrawCharacter();
     return { ok: true, persisted };
   }
 
@@ -287,14 +253,6 @@ class AssetManager {
     await storage.deleteAsset('character');
     settings.reset('character');
     this.redrawCharacter();
-  }
-
-  async resetBackground(): Promise<void> {
-    this.bgSource?.close();
-    this.bgSource = null;
-    await storage.deleteAsset('background');
-    settings.reset('background');
-    this.redrawBackground();
   }
 
   isCustom(kind: Kind): boolean {

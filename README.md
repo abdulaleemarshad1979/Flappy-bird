@@ -25,7 +25,6 @@ Node 20+ recommended.
 
 - **Character**: upload JPG/PNG/WebP, preview, then APPLY. Default is image only: original mode with transparent PNG cut-outs shown as-is (transparent margins are auto-trimmed). Optional circle / rounded crop, zoom, X/Y position, pixelate (+6-level color quantization), pixel outline and soft shadow. The hitbox is a fixed circle, so every picture is equally fair.
 - **Audio**: custom music and crash sound (MP3, WAV, OGG where the browser supports it). Preview buttons, separate music/effects volume, mutes, loop. Built-in defaults are synthesized in the browser (two chiptune tracksand a "thud" crash; no speech is generated.
-- **Background**: turquoise, day, sunset, night or your own image; brightness; parallax on/off.
 - **Gameplay**: Easy / Normal / Hard (gap, speed, gravity, flap strength), music/effects on/off, animation toggles (shake, particles, tilt), resets.
 
 On a crash the run ends immediately, music fades out, the crash sound plays exactly once, then the Game Over panel shows. Restart stops any unfinished crash sound and restarts music.
@@ -33,7 +32,7 @@ On a crash the run ends immediately, music fades out, the crash sound plays exac
 ## Storage (all in your browser)
 
 - LocalStorage: settings, best score, stats, achievements.
-- Cache Storage (`authu-bird-assets-v1`): uploaded images and audio (never stored as LocalStorage strings).
+- Cache Storage (`authu-bird-assets-v1`): your uploaded face image and audio (never stored as LocalStorage strings).
 - If Cache Storage is unavailable (e.g. plain http on a LAN IP, private mode) or full, uploads still work for the current session and the game says so.
 - Clearing site data can delete everything. Nothing syncs between devices.
 

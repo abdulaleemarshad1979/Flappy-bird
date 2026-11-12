@@ -1,5 +1,5 @@
 import { bus } from '../bus';
-import { THEMES, type Difficulty, type ThemeId } from '../game/GameConfig';
+import type { Difficulty } from '../game/GameConfig';
 import { birdFrame } from '../game/TextureFactory';
 import { assets, CHAR_OUT, renderCharacter } from '../systems/AssetManager';
 import { audio, TRACKS } from '../systems/AudioManager';
@@ -7,10 +7,10 @@ import { settings, type Crop } from '../systems/SettingsManager';
 import { storage } from '../systems/StorageManager';
 import { btn, h, segmented, slider, toast, toggle } from './dom';
 
-type Tab = 'character' | 'audio' | 'background' | 'gameplay';
+type Tab = 'character' | 'audio' | 'gameplay';
 type Opts = { tab?: Tab; onClose?: () => void };
 
-const TABS: [Tab, string][] = [['character', 'CHARACTER'], ['audio', 'AUDIO'], ['background', 'BACKGROUND'], ['gameplay', 'GAMEPLAY']];
+const TABS: [Tab, string][] = [['character', 'CHARACTER'], ['audio', 'AUDIO'], ['gameplay', 'GAMEPLAY']];
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 let open = false;
 
@@ -62,7 +62,6 @@ function openPanel({ tab = 'character', onClose }: Opts): void {
     tabs.querySelectorAll('button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
     if (tab === 'character') renderCharacterTab();
     else if (tab === 'audio') renderAudioTab();
-    else if (tab === 'background') renderBackgroundTab();
     else renderGameplayTab();
   };
   const rerender = () => {
@@ -113,12 +112,13 @@ function openPanel({ tab = 'character', onClose }: Opts): void {
     prev.width = prev.height = CHAR_OUT;
     const draw = () => {
       const src = pending?.bmp ?? assets.charSource;
+      prev.style.imageRendering = src && !settings.s.character.pixelate ? 'auto' : 'pixelated';
       if (src) renderCharacter(src, settings.s.character, prev);
       else {
         const x = prev.getContext('2d')!;
         x.clearRect(0, 0, CHAR_OUT, CHAR_OUT);
         x.imageSmoothingEnabled = false;
-        x.drawImage(birdFrame(1), (CHAR_OUT - 38) / 2, (CHAR_OUT - 28) / 2);
+        x.drawImage(birdFrame(1), (CHAR_OUT - 38 * 4) / 2, (CHAR_OUT - 28 * 4) / 2, 38 * 4, 28 * 4);
       }
     };
     draw();
@@ -145,7 +145,7 @@ function openPanel({ tab = 'character', onClose }: Opts): void {
         btn('APPLY', async () => {
           const p = pending!;
           pending = null;
-          const r = await assets.commit('character', p.file, p.bmp);
+          const r = await assets.commit(p.file, p.bmp);
           toast('Character applied!');
           persistNote(r.persisted);
           rerender();
@@ -241,47 +241,6 @@ function openPanel({ tab = 'character', onClose }: Opts): void {
     body.append(fx, h('p', 'note', 'MP3, WAV and (where your browser supports it) OGG. The crash sound plays once per crash and the music fades out.'));
   }
 
-  // ---------------------------------------------------------------- BACKGROUND
-  function renderBackgroundTab(): void {
-    const b = settings.s.background;
-    const ids: ThemeId[] = ['turquoise', 'day', 'sunset', 'night'];
-    if (assets.hasBackground) ids.push('custom');
-    const prev = h('div', 'bg-preview');
-    const paint = (id: ThemeId) => {
-      prev.style.background = id === 'custom' ? '#555' : THEMES[id].preview;
-      prev.textContent = id === 'custom' ? settings.s.customs.background ?? '' : '';
-      prev.style.fontSize = '.5em';
-      prev.style.color = '#fff';
-      prev.style.padding = '1em';
-    };
-    paint(b.theme === 'custom' && !assets.hasBackground ? 'turquoise' : b.theme);
-    const sect = h('div', 'sect', h('h3', '', 'THEME'), prev);
-    sect.append(
-      segmented<ThemeId>(ids.map((id) => ({ value: id, label: THEMES[id].label, swatch: id === 'custom' ? '#777' : THEMES[id].preview })), b.theme, (v) => {
-        settings.update((s) => (s.background.theme = v));
-        paint(v);
-      }),
-      h('div', 'btns',
-        uploadButton('UPLOAD IMAGE', 'image/jpeg,image/png,image/webp', async (file) => {
-          const r = await assets.preview(file, 'image');
-          if (r.error || !r.bmp) return toast(r.error ?? 'Could not load image.');
-          const res = await assets.commit('background', file, r.bmp);
-          toast('Background applied!');
-          persistNote(res.persisted);
-          rerender();
-        }),
-        assets.hasBackground ? btn('RESET', async () => { await assets.resetBackground(); toast('Background reset'); rerender(); }, 'small sand') : null,
-      ),
-    );
-    const fx = h('div', 'sect', h('h3', '', 'LOOK'));
-    fx.append(
-      slider('BRIGHTNESS', b.brightness, 0.4, 1.4, 0.05, pct, (v) => settings.update((s) => (s.background.brightness = v))),
-      toggle('PARALLAX', b.parallax, (v) => settings.update((s) => (s.background.parallax = v))),
-      h('div', 'btns', btn('RESET BACKGROUND', async () => { await assets.resetBackground(); toast('Background reset'); rerender(); }, 'small sand')),
-    );
-    body.append(sect, fx);
-  }
-
   // ---------------------------------------------------------------- GAMEPLAY
   function renderGameplayTab(): void {
     const s0 = settings.s;
@@ -310,7 +269,6 @@ function openPanel({ tab = 'character', onClose }: Opts): void {
         return;
       }
       await assets.resetCharacter();
-      await assets.resetBackground();
       await audio.resetAll();
       settings.reset('all');
       toast('All settings reset. Scores are kept.');

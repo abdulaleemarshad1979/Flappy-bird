@@ -3,7 +3,7 @@ import Phaser from 'phaser';
 import './styles/main.css';
 import { BootScene } from './game/BootScene';
 import { GameScene } from './game/GameScene';
-import { H, W } from './game/GameConfig';
+import { H, K, W } from './game/GameConfig';
 import { MainMenuScene } from './game/MainMenuScene';
 import { assets } from './systems/AssetManager';
 import { audio } from './systems/AudioManager';
@@ -28,8 +28,8 @@ async function boot(): Promise<void> {
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: 'game',
-    width: W,
-    height: H,
+    width: W * K,
+    height: H * K,
     backgroundColor: '#4ec0ca',
     pixelArt: true,
     audio: { noAudio: true }, // all sound goes through AudioManager

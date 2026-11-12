@@ -52,16 +52,11 @@ export function slider(label: string, value: number, min: number, max: number, s
   return h('div', 'line', h('span', '', label), input, val);
 }
 
-export function segmented<T extends string>(opts: { value: T; label: string; swatch?: string }[], cur: T, onPick: (v: T) => void): HTMLElement {
+export function segmented<T extends string>(opts: { value: T; label: string }[], cur: T, onPick: (v: T) => void): HTMLElement {
   const wrap = h('div', 'seg');
   wrap.setAttribute('role', 'group');
   const buttons = opts.map((o) => {
     const b = h('button', '', o.label);
-    if (o.swatch) {
-      const sw = h('span', 'sw');
-      sw.style.background = o.swatch;
-      b.prepend(sw);
-    }
     b.type = 'button';
     b.setAttribute('aria-pressed', String(o.value === cur));
     b.addEventListener('click', () => {
