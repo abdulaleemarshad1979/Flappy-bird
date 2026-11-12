@@ -1,0 +1,20 @@
+{
+  "name": "authu-bird",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Authu Bird - customizable pixel-art Flappy-style browser game",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@fontsource/press-start-2p": "^5.3.0",
+    "phaser": "^3.90.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vite": "^8.3.8"
+  }
+}
